@@ -218,23 +218,55 @@ function showSuccess(text, opts = {}) {
   $("success-box").classList.remove("hidden");
   $("answer").disabled = true;
   $("submit-btn").disabled = true;
+  // běžná mezi-úroveň: tlačítko Pokračovat na další šifru
+  $("continue-btn").classList.remove("hidden");
+}
 
-  const choices = $("finale-choices");
-  const continueBtn = $("continue-btn");
+// Samostatná finální obrazovka (bez šifry). type: "basic" | "hard"
+function showFinale(type) {
+  // skryj herní obrazovku, ukaž finále
+  $("game").classList.add("hidden");
+  $("intro").classList.add("hidden");
+  $("finale").classList.remove("hidden");
 
-  if (opts.finaleBasic) {
-    // konec základní hry: 1) ukončit 2) pokračovat na těžkou
-    choices.classList.remove("hidden");
-    continueBtn.classList.add("hidden");
-  } else if (opts.finaleHard) {
-    // úplný konec
-    choices.classList.add("hidden");
-    continueBtn.classList.add("hidden");
+  const actions = $("finale-actions");
+  actions.innerHTML = "";
+
+  if (type === "basic") {
+    $("finale-text").innerHTML = "Dokončil/a jsi základní úroveň hry!";
+    $("finale-text").style.color = "var(--green)";
+    $("finale-score").innerHTML = singleScoreHtml("zakladni");
+
+    const hard = document.createElement("button");
+    hard.className = "btn-hard";
+    hard.textContent = "Pokračovat na těžkou úroveň 🔥";
+    hard.addEventListener("click", continueToHard);
+
+    const quit = document.createElement("button");
+    quit.className = "btn-quit";
+    quit.textContent = "Ukončit hru";
+    quit.addEventListener("click", endGame);
+
+    actions.appendChild(hard);
+    actions.appendChild(quit);
   } else {
-    // běžná úroveň: tlačítko pokračuj
-    choices.classList.add("hidden");
-    continueBtn.classList.remove("hidden");
+    $("finale-text").innerHTML = "💍 Dokončil/a jsi celou hru!";
+    $("finale-text").style.color = "var(--accent-deep)";
+    $("finale-score").innerHTML = totalScoreHtml();
+
+    const restart = document.createElement("button");
+    restart.className = "btn-quit";
+    restart.textContent = "↺ Hrát znovu";
+    restart.addEventListener("click", restartGame);
+    actions.appendChild(restart);
   }
+}
+
+// Přechod z finální obrazovky základní hry na těžkou větev
+function continueToHard() {
+  $("finale").classList.add("hidden");
+  $("game").classList.remove("hidden");
+  startBranch("tezka");
 }
 
 async function handleSubmit() {
@@ -262,18 +294,14 @@ async function handleSubmit() {
     if (state.branch === "zakladni") {
       // zastav časomíru základní části (pauza do rozhodnutí pokračovat)
       lockPart("zakladni");
-      const text = "Dokončil/a jsi základní úroveň hry!";
       state.current.finaleState = "basic";
-      state.current.finaleSuccessText = text;
       saveProgress();
-      showSuccess(text + singleScoreHtml("zakladni"), { finaleBasic: true });
+      showFinale("basic");
     } else {
       lockPart("tezka");
-      const text = "💍 Dokončil/a jsi celou hru!";
       state.current.finaleState = "hard";
-      state.current.finaleSuccessText = text;
       saveProgress();
-      showSuccess(text + totalScoreHtml(), { finaleHard: true });
+      showFinale("hard");
     }
     return;
   }
@@ -323,12 +351,26 @@ function startBranch(branch) {
 
 function endGame() {
   clearProgress();
-  $("game").innerHTML =
-    '<div class="end">Děkujeme za hru! 💛<br>Tuhle záložku můžeš zavřít.</div>';
+  const html = '<div class="end">Děkujeme za hru! 💛<br>Tuhle záložku můžeš zavřít.</div>';
+  $("intro").classList.add("hidden");
+  $("finale").classList.add("hidden");
+  $("game").classList.remove("hidden");
+  $("game").innerHTML = html;
 }
 
 function restartGame() {
+  // Jsme v těžké části? (hraní těžké nebo její finále) → nabídni volbu
+  if (state.branch === "tezka") {
+    $("restart-modal").classList.remove("hidden");
+    return;
+  }
+  // Jinak (základní část) — rovnou dotaz a zpět na úvod
   if (!confirm("Opravdu začít znovu? Tvůj postup se ztratí a vrátíš se na úvod.")) return;
+  restartToIntro();
+}
+
+// Úplný reset: zpět na úvodní obrazovku, vynuluje obě části
+function restartToIntro() {
   clearProgress();
   state._pendingNext = null;
   state.index = 0;
@@ -337,10 +379,18 @@ function restartGame() {
     zakladni: { startTime: null, seconds: null, mistakes: 0 },
     tezka:    { startTime: null, seconds: null, mistakes: 0 }
   };
-  // zpět na úvodní obrazovku
   $("game").classList.add("hidden");
+  $("finale").classList.add("hidden");
   $("intro").classList.remove("hidden");
   $("start-btn").textContent = "Spustit šifrovací hru";
+}
+
+// Restart jen těžké části: skóre základní zůstává, těžká se měří znovu
+function restartToHard() {
+  state._pendingNext = null;
+  $("finale").classList.add("hidden");
+  $("game").classList.remove("hidden");
+  startBranch("tezka"); // vynuluje a znovu spustí časomíru těžké části
 }
 
 // ---- INIT ----
@@ -359,10 +409,21 @@ async function init() {
     if (e.key === "Enter") handleSubmit();
   });
   $("continue-btn").addEventListener("click", goNext);
-  $("hard-btn").addEventListener("click", () => startBranch("tezka"));
-  $("quit-btn").addEventListener("click", endGame);
   $("restart-btn").addEventListener("click", restartGame);
   $("start-btn").addEventListener("click", startGame);
+
+  // tlačítka v dialogu volby restartu (těžká část)
+  $("rm-hard").addEventListener("click", () => {
+    $("restart-modal").classList.add("hidden");
+    restartToHard();
+  });
+  $("rm-full").addEventListener("click", () => {
+    $("restart-modal").classList.add("hidden");
+    restartToIntro();
+  });
+  $("rm-cancel").addEventListener("click", () => {
+    $("restart-modal").classList.add("hidden");
+  });
 
   // Pokud má hráč rozehráno, uprav text úvodního tlačítka
   if (loadProgress()) {
@@ -381,11 +442,11 @@ function startGame() {
     state.index = saved.index;
     if (saved.parts) state.parts = saved.parts;
     renderLevel(saved.current);
-    // pokud hráč skončil na finálové obrazovce, obnov ji i se skóre
+    // pokud hráč skončil na finálové obrazovce, obnov ji jako samostatnou obrazovku
     if (saved.current.finaleState === "basic") {
-      showSuccess(saved.current.finaleSuccessText + singleScoreHtml("zakladni"), { finaleBasic: true });
+      showFinale("basic");
     } else if (saved.current.finaleState === "hard") {
-      showSuccess(saved.current.finaleSuccessText + totalScoreHtml(), { finaleHard: true });
+      showFinale("hard");
     }
     return;
   }

@@ -375,6 +375,64 @@
       color: var(--ink-dim);
       margin-top: 6px;
     }
+
+    #finale-text {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 22px;
+      font-weight: 500;
+      line-height: 1.4;
+      color: var(--green);
+      text-align: center;
+      margin-bottom: 4px;
+      position: relative;
+    }
+    .finale-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 18px;
+      position: relative;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(20, 16, 12, .55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      z-index: 50;
+      animation: fade .2s ease;
+    }
+    @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+    .modal-box {
+      width: 100%;
+      max-width: 360px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 26px 22px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.3);
+      text-align: center;
+    }
+    .modal-title {
+      font-family: "Great Vibes", cursive;
+      font-size: 30px;
+      color: var(--accent-deep);
+      margin-bottom: 8px;
+    }
+    .modal-text {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 17px;
+      color: var(--ink-soft);
+      margin-bottom: 20px;
+    }
+    .modal-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
   </style>
 </head>
 <body>
@@ -417,10 +475,36 @@
       <div id="success-box" class="hidden">
         <div id="success-text"></div>
         <button id="continue-btn" class="btn-go hidden">Pokračovat na další šifru →</button>
-        <div id="finale-choices" class="hidden">
-          <button id="hard-btn" class="btn-hard">Pokračovat na těžkou úroveň 🔥</button>
-          <button id="quit-btn" class="btn-quit">Ukončit hru</button>
-        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FINÁLNÍ OBRAZOVKA (gratulace + skóre, bez šifry) -->
+  <div id="finale" class="hidden">
+    <div class="crest">
+      <div class="sprig">❧</div>
+      <h1>Jitka &amp; Radomír</h1>
+      <div class="meta">18. července 2026 · Nový Dvůr, Lhotka</div>
+    </div>
+
+    <div class="intro-card">
+      <div id="finale-text"></div>
+      <div id="finale-score"></div>
+      <div id="finale-actions" class="finale-actions"></div>
+    </div>
+
+    <div class="footer">Tam, kde začíná my<span class="place">Jitka &amp; Radomír · 18. 7. 2026</span></div>
+  </div>
+
+  <!-- DIALOG: volba restartu v těžké části -->
+  <div id="restart-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-title">Začít znovu</div>
+      <div class="modal-text">Jsi v těžké části. Kam se chceš vrátit?</div>
+      <div class="modal-actions">
+        <button id="rm-hard" class="btn-hard">Na start těžké části</button>
+        <button id="rm-full" class="btn-go">Úplně na začátek</button>
+        <button id="rm-cancel" class="btn-quit">Zrušit</button>
       </div>
     </div>
   </div>
