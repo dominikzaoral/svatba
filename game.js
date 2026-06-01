@@ -224,10 +224,15 @@ function endGame() {
 }
 
 function restartGame() {
-  if (!confirm("Opravdu začít znovu od první šifry? Tvůj postup se ztratí.")) return;
+  if (!confirm("Opravdu začít znovu? Tvůj postup se ztratí a vrátíš se na úvod.")) return;
   clearProgress();
   state._pendingNext = null;
-  startBranch("zakladni");
+  state.index = 0;
+  state.branch = "zakladni";
+  // zpět na úvodní obrazovku
+  $("game").classList.add("hidden");
+  $("intro").classList.remove("hidden");
+  $("start-btn").textContent = "Spustit šifrovací hru";
 }
 
 // ---- INIT ----
