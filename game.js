@@ -190,6 +190,83 @@ async function tryDecrypt(answer, block) {
   }
 }
 
+// ---- ZVUKY (Web Audio API, bez souborů) ----
+let audioCtx = null;
+function ensureAudio() {
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (e) { audioCtx = null; }
+  }
+  return audioCtx;
+}
+// Zahraje sekvenci tónů. notes = [{f: frekvence, t: délka v s}, ...]
+function playTones(notes) {
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  let when = ctx.currentTime;
+  for (const n of notes) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = n.f;
+    gain.gain.setValueAtTime(0.0001, when);
+    gain.gain.exponentialRampToValueAtTime(0.25, when + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, when + n.t);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(when);
+    osc.stop(when + n.t);
+    when += n.t;
+  }
+}
+function soundCorrect() { playTones([{ f: 660, t: 0.12 }, { f: 880, t: 0.18 }]); }
+function soundWrong()   { playTones([{ f: 220, t: 0.18 }]); }
+function soundFinale()  { playTones([{ f: 523, t: 0.15 }, { f: 659, t: 0.15 }, { f: 784, t: 0.15 }, { f: 1047, t: 0.3 }]); }
+
+// ---- KONFETY (canvas, bez knihovny) ----
+function launchConfetti(durationMs = 2500) {
+  const canvas = document.createElement("canvas");
+  canvas.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:100;";
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  function resize() { canvas.width = innerWidth * dpr; canvas.height = innerHeight * dpr; }
+  resize();
+  const colors = ["#b8924e", "#cdab6e", "#9a7838", "#6f8a5b", "#f3ece2", "#e3c889"];
+  const N = 140;
+  const parts = Array.from({ length: N }, () => ({
+    x: Math.random() * canvas.width,
+    y: -Math.random() * canvas.height * 0.4,
+    r: (4 + Math.random() * 6) * dpr,
+    c: colors[(Math.random() * colors.length) | 0],
+    vx: (-1 + Math.random() * 2) * dpr,
+    vy: (2 + Math.random() * 3) * dpr,
+    rot: Math.random() * Math.PI,
+    vr: -0.1 + Math.random() * 0.2
+  }));
+  const start = performance.now();
+  function frame(now) {
+    const elapsed = now - start;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const p of parts) {
+      p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.c;
+      ctx.fillRect(-p.r / 2, -p.r / 2, p.r, p.r * 0.6);
+      ctx.restore();
+    }
+    if (elapsed < durationMs) {
+      requestAnimationFrame(frame);
+    } else {
+      // dojezd: necháme propadnout dolů, pak odstraníme
+      if (parts.some(p => p.y < canvas.height + 20)) requestAnimationFrame(frame);
+      else canvas.remove();
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
 // ---- UI ----
 
 const $ = (id) => document.getElementById(id);
@@ -221,6 +298,17 @@ function renderLevel(content) {
   const total = state.data[state.branch].blocks.length + 1;
   const label = state.branch === "zakladni" ? "Základní" : "Těžká";
   $("level-label").textContent = `${label} úroveň — ${num} / ${total}`;
+
+  // progress lišta
+  $("progress-fill").style.width = (num / total * 100) + "%";
+
+  // plynulý fade karty při každé nové úrovni
+  const card = document.querySelector("#game .card");
+  if (card) {
+    card.classList.remove("card-fade");
+    void card.offsetWidth; // restart animace
+    card.classList.add("card-fade");
+  }
 
   $("answer").focus();
 }
@@ -281,7 +369,7 @@ function showSuccess(text, opts = {}) {
 }
 
 // Samostatná finální obrazovka (bez šifry). type: "basic" | "hard"
-function showFinale(type) {
+function showFinale(type, celebrate = true) {
   // skryj herní obrazovku, ukaž finále
   $("game").classList.add("hidden");
   $("intro").classList.add("hidden");
@@ -300,17 +388,23 @@ function showFinale(type) {
     hard.textContent = "Pokračovat na těžkou úroveň 🔥";
     hard.addEventListener("click", continueToHard);
 
+    const share = makeShareButton();
+
     const quit = document.createElement("button");
     quit.className = "btn-quit";
     quit.textContent = "Ukončit hru";
     quit.addEventListener("click", endGame);
 
     actions.appendChild(hard);
+    actions.appendChild(share);
     actions.appendChild(quit);
   } else {
     $("finale-text").innerHTML = "💍 Dokončil/a jsi celou hru!";
     $("finale-text").style.color = "var(--accent-deep)";
     $("finale-score").innerHTML = totalScoreHtml();
+
+    const share = makeShareButton();
+    actions.appendChild(share);
 
     const restart = document.createElement("button");
     restart.className = "btn-quit";
@@ -318,6 +412,50 @@ function showFinale(type) {
     restart.addEventListener("click", restartGame);
     actions.appendChild(restart);
   }
+
+  // oslava: konfety + fanfára (ne při obnově po refreshi)
+  if (celebrate) {
+    launchConfetti();
+    soundFinale();
+  }
+}
+
+// ---- SDÍLENÍ VÝSLEDKU ----
+const GAME_URL = "https://dominikzaoral.github.io/svatba/";
+
+function buildShareText() {
+  const z = partResult(state.parts.zakladni);
+  const t = partResult(state.parts.tezka);
+  // pokud hráč hrál i těžkou (má uzamčený čas), uveď celkové; jinak jen základní
+  const playedHard = state.parts.tezka.seconds !== null;
+  let total, rankTitle;
+  if (playedHard) {
+    total = z.score + t.score;
+    rankTitle = rankFor(total).title;
+    return `Dokončil/a jsem svatební šifrovačku Jitky a Radomíra s ${total.toLocaleString("cs-CZ")} body — ${rankTitle}! Zahraj si taky: ${GAME_URL}`;
+  }
+  return `Zvládl/a jsem základní část svatební šifrovačky Jitky a Radomíra s ${z.score.toLocaleString("cs-CZ")} body! Zahraj si taky: ${GAME_URL}`;
+}
+
+function makeShareButton() {
+  const btn = document.createElement("button");
+  btn.className = "btn-go";
+  btn.textContent = "📤 Pochlubit se skóre";
+  btn.addEventListener("click", async () => {
+    const text = buildShareText();
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Svatební šifrovačka", text, url: GAME_URL });
+      } else {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = "✓ Zkopírováno do schránky";
+        setTimeout(() => { btn.textContent = "📤 Pochlubit se skóre"; }, 2000);
+      }
+    } catch (e) {
+      // uživatel sdílení zrušil — nic neděláme
+    }
+  });
+  return btn;
 }
 
 // Přechod z finální obrazovky základní hry na těžkou větev
@@ -345,6 +483,7 @@ async function handleSubmit() {
     if (!finale) {
       state.parts[state.branch].mistakes += 1;
       saveProgress();
+      soundWrong();
       $("error").textContent = "❌ Špatná odpověď, zkus to znovu.";
       $("submit-btn").disabled = false;
       return;
@@ -369,6 +508,7 @@ async function handleSubmit() {
   if (!next) {
     state.parts[state.branch].mistakes += 1;
     saveProgress();
+    soundWrong();
     $("error").textContent = "❌ Špatná odpověď, zkus to znovu.";
     $("submit-btn").disabled = false;
     return;
@@ -376,6 +516,7 @@ async function handleSubmit() {
 
   // Ulož odemčený obsah a ukaž success z právě vyřešené úrovně
   state._pendingNext = next;
+  soundCorrect();
   showSuccess(next.prevSuccess, {});
 }
 
@@ -457,6 +598,30 @@ function restartToHard() {
 
 // ---- INIT ----
 
+// ---- TMAVÝ REŽIM ----
+const THEME_KEY = "svatba_theme";
+
+function loadTheme() {
+  try { return localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light"; }
+  catch (e) { return "light"; }
+}
+
+function applyTheme(theme) {
+  if (theme === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+  }
+  const btn = $("theme-btn");
+  if (btn) btn.textContent = theme === "dark" ? "☀️ Světlý režim" : "🌙 Tmavý režim";
+}
+
+function toggleTheme() {
+  const next = loadTheme() === "dark" ? "light" : "dark";
+  try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+  applyTheme(next);
+}
+
 async function init() {
   try {
     const res = await fetch("levels.json", { cache: "no-store" });
@@ -484,6 +649,10 @@ async function init() {
     $("rules").classList.add("hidden");
     $("intro").classList.remove("hidden");
   });
+
+  // tmavý režim
+  $("theme-btn").addEventListener("click", toggleTheme);
+  applyTheme(loadTheme()); // aplikuj uložené téma a nastav text tlačítka
 
   // tlačítka v dialogu volby restartu (těžká část)
   $("rm-hard").addEventListener("click", () => {
@@ -516,11 +685,11 @@ function startGame() {
     state.hintsShown = saved.hintsShown || 0;
     if (saved.parts) state.parts = saved.parts;
     renderLevel(saved.current);
-    // pokud hráč skončil na finálové obrazovce, obnov ji jako samostatnou obrazovku
+    // pokud hráč skončil na finálové obrazovce, obnov ji jako samostatnou obrazovku (bez oslavy)
     if (saved.current.finaleState === "basic") {
-      showFinale("basic");
+      showFinale("basic", false);
     } else if (saved.current.finaleState === "hard") {
-      showFinale("hard");
+      showFinale("hard", false);
     }
     return;
   }

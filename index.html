@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Svatební šifrovačka</title>
+  <script>
+    // Aplikuj uložené téma okamžitě, ať neproblikne světlá obrazovka
+    try { if (localStorage.getItem("svatba_theme") === "dark") document.documentElement.setAttribute("data-theme", "dark"); } catch (e) {}
+  </script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💍</text></svg>">
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💍</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -24,20 +28,46 @@
       --red: #b56a52;
       --border: #e3d9c8;
       --line: #d8cab2;
+      --glow: #fdfbf6;
+      --on-accent: #ffffff;
+      --field-bg: #fdfbf6;
       --radius: 4px;
     }
 
+    [data-theme="dark"] {
+      --bg: #1a1611;
+      --bg-soft: #221d16;
+      --card: #262019;
+      --ink: #f3ece2;
+      --ink-soft: #d8ccba;
+      --ink-dim: #9c8e79;
+      --accent: #cdab6e;
+      --accent-soft: #e3c889;
+      --accent-deep: #e3c889;
+      --green: #9cc189;
+      --red: #d8957e;
+      --border: #3d342a;
+      --line: #4a3f31;
+      --glow: #2e2417;
+      --on-accent: #1a1611;
+      --field-bg: #1d1812;
+    }
+
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    .card, .intro-card, .rules-card, .modal-box, #answer, button {
+      transition: background-color .3s ease, color .3s ease, border-color .3s ease;
+    }
 
     html, body {
       margin: 0; padding: 0;
       min-height: 100%;
       background:
-        radial-gradient(900px 500px at 50% -5%, #fdfbf6 0%, transparent 65%),
+        radial-gradient(900px 500px at 50% -5%, var(--glow) 0%, transparent 65%),
         var(--bg);
       color: var(--ink);
       font-family: "EB Garamond", Georgia, serif;
       -webkit-font-smoothing: antialiased;
+      transition: background-color .3s ease, color .3s ease;
     }
 
     body {
@@ -160,6 +190,31 @@
       margin-bottom: 14px;
     }
 
+    #progress-bar {
+      width: 100%;
+      max-width: 260px;
+      height: 5px;
+      margin: 0 auto 16px;
+      background: rgba(184,146,78,.18);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    #progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent-soft), var(--accent));
+      border-radius: 3px;
+      transition: width .5s cubic-bezier(.2,.8,.2,1);
+    }
+
+    .card-fade {
+      animation: cardFade .35s ease;
+    }
+    @keyframes cardFade {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     .crest {
       text-align: center;
       margin-bottom: 22px;
@@ -268,7 +323,7 @@
       font-size: 16px;
       font-family: "EB Garamond", serif;
       color: var(--ink);
-      background: #fdfbf6;
+      background: var(--field-bg);
       border: 1px solid var(--line);
       border-radius: 3px;
       outline: none;
@@ -298,7 +353,7 @@
       font-weight: 600;
       letter-spacing: 2px;
       text-transform: uppercase;
-      color: #fff;
+      color: var(--on-accent);
       background: linear-gradient(180deg, var(--accent-soft), var(--accent));
       border-radius: 3px;
       box-shadow: 0 6px 18px rgba(184,146,78,.28);
@@ -443,7 +498,7 @@
     .btn-hard {
       width: 100%; padding: 14px; font-size: 15px; font-weight: 600;
       letter-spacing: 1.5px; text-transform: uppercase;
-      color: #fff;
+      color: var(--on-accent);
       background: linear-gradient(180deg, var(--accent-soft), var(--accent));
       border-radius: 3px;
     }
@@ -548,6 +603,7 @@
       <p class="intro-lead">Připravili jsme pro vás malou šifrovací hru.<br>Vyřešte všechny šifry a projděte naší cestou.</p>
       <button id="start-btn" class="btn-primary">Spustit šifrovací hru</button>
       <button id="rules-btn" class="btn-rules">📜 Pravidla</button>
+      <button id="theme-btn" class="btn-rules">🌙 Tmavý režim</button>
     </div>
 
     <div class="footer">Tam, kde začíná my<span class="place">Jitka &amp; Radomír · 18. 7. 2026</span></div>
@@ -560,6 +616,7 @@
     </div>
 
     <div id="level-label"></div>
+    <div id="progress-bar"><div id="progress-fill"></div></div>
 
     <div class="card">
       <img id="level-image" class="hidden" alt="šifra" />
