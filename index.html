@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Svatební šifrovačka</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f5f0e8;
+      --bg-soft: #fbf8f2;
+      --card: #ffffff;
+      --ink: #2c2620;
+      --ink-soft: #4a4138;
+      --ink-dim: #8a7d6c;
+      --accent: #b8924e;
+      --accent-soft: #cdab6e;
+      --accent-deep: #9a7838;
+      --green: #6f8a5b;
+      --red: #b56a52;
+      --border: #e3d9c8;
+      --line: #d8cab2;
+      --radius: 4px;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      margin: 0; padding: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(900px 500px at 50% -5%, #fdfbf6 0%, transparent 65%),
+        var(--bg);
+      color: var(--ink);
+      font-family: "EB Garamond", Georgia, serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 18px;
+      min-height: 100vh;
+      min-height: 100dvh;
+    }
+
+    #game {
+      width: 100%;
+      max-width: 460px;
+      animation: rise .6s cubic-bezier(.2,.8,.2,1);
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .crest {
+      text-align: center;
+      margin-bottom: 22px;
+    }
+    .crest .eyebrow {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      line-height: 1.7;
+      margin-bottom: 14px;
+    }
+    .crest .sprig {
+      font-size: 22px;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    .crest h1 {
+      font-family: "Great Vibes", cursive;
+      font-weight: 400;
+      font-size: 40px;
+      line-height: 1.1;
+      letter-spacing: .5px;
+      margin: 0;
+      color: var(--ink);
+    }
+    .crest .amp {
+      font-family: "Great Vibes", cursive;
+      font-size: 24px;
+      color: var(--accent);
+      margin: 2px 0;
+    }
+    .crest .meta {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 14px;
+      letter-spacing: 1px;
+      color: var(--ink-dim);
+      margin-top: 12px;
+    }
+
+    #level-label {
+      text-align: center;
+      font-family: "Cormorant Garamond", serif;
+      font-size: 13px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--accent-deep);
+      margin-bottom: 14px;
+    }
+
+    .btn-restart {
+      margin-top: 16px;
+      padding: 7px 18px;
+      font-family: "Cormorant Garamond", serif;
+      font-size: 13px;
+      letter-spacing: 1.5px;
+      color: var(--ink-dim);
+      background: transparent;
+      border: 1px solid var(--line);
+      border-radius: 2px;
+    }
+    .btn-restart:hover { color: var(--accent-deep); border-color: var(--accent); }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 30px 26px;
+      box-shadow: 0 10px 40px rgba(120,100,60,.12);
+      position: relative;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 7px;
+      border: 1px solid var(--line);
+      border-radius: 2px;
+      pointer-events: none;
+    }
+
+    #level-image {
+      width: 100%;
+      border-radius: 3px;
+      margin-bottom: 20px;
+      border: 1px solid var(--border);
+    }
+
+    #prompt {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 23px;
+      font-weight: 500;
+      line-height: 1.55;
+      color: var(--ink);
+      margin-bottom: 24px;
+      text-align: center;
+      position: relative;
+    }
+
+    .field { position: relative; }
+
+    #answer {
+      width: 100%;
+      padding: 15px 16px;
+      font-size: 16px;
+      font-family: "EB Garamond", serif;
+      color: var(--ink);
+      background: #fdfbf6;
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      outline: none;
+      text-align: center;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    #answer:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(184,146,78,.15);
+    }
+    #answer::placeholder { color: #b3a591; font-style: italic; }
+
+    button {
+      font-family: "Cormorant Garamond", serif;
+      cursor: pointer;
+      border: none;
+      transition: transform .12s, filter .2s, opacity .2s;
+    }
+    button:active { transform: scale(.97); }
+    button:disabled { opacity: .5; cursor: default; }
+
+    .btn-primary {
+      width: 100%;
+      margin-top: 14px;
+      padding: 15px;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #fff;
+      background: linear-gradient(180deg, var(--accent-soft), var(--accent));
+      border-radius: 3px;
+      box-shadow: 0 6px 18px rgba(184,146,78,.28);
+    }
+    .btn-primary:hover { filter: brightness(1.05); }
+
+    #error {
+      min-height: 20px;
+      margin-top: 12px;
+      text-align: center;
+      font-family: "Cormorant Garamond", serif;
+      font-size: 15px;
+      color: var(--red);
+    }
+
+    .hidden { display: none !important; }
+
+    #success-box {
+      margin-top: 22px;
+      padding: 22px;
+      background: rgba(111,138,91,.07);
+      border: 1px solid rgba(111,138,91,.25);
+      border-radius: 4px;
+      text-align: center;
+      animation: rise .4s ease;
+    }
+    #success-text {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 21px;
+      font-weight: 500;
+      line-height: 1.45;
+      color: var(--green);
+      margin-bottom: 18px;
+    }
+
+    .btn-go {
+      width: 100%;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      color: var(--accent-deep);
+      background: #fff;
+      border: 1px solid var(--accent);
+      border-radius: 3px;
+    }
+    .btn-go:hover { background: #fdf8ee; }
+
+    #finale-choices { display: flex; flex-direction: column; gap: 10px; }
+    .btn-quit {
+      width: 100%; padding: 13px; font-size: 15px; letter-spacing: 1px;
+      color: var(--ink-dim); background: transparent;
+      border: 1px solid var(--line); border-radius: 3px;
+    }
+    .btn-hard {
+      width: 100%; padding: 14px; font-size: 15px; font-weight: 600;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      color: #fff;
+      background: linear-gradient(180deg, var(--accent-soft), var(--accent));
+      border-radius: 3px;
+    }
+
+    .end {
+      text-align: center;
+      font-family: "Great Vibes", cursive;
+      font-size: 32px;
+      line-height: 1.4;
+      color: var(--accent-deep);
+      padding: 40px 0;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 26px;
+      font-family: "Great Vibes", cursive;
+      font-size: 20px;
+      letter-spacing: .5px;
+      color: var(--accent-deep);
+    }
+    .footer .place {
+      display: block;
+      font-family: "Cormorant Garamond", serif;
+      font-size: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--ink-dim);
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <div class="crest">
+      <div class="eyebrow">Oslava lásky, která rostla<br>s každým dnem naší cesty</div>
+      <div class="sprig">❧</div>
+      <h1>Jitka &amp; Radomír</h1>
+      <div class="meta">18. července 2026 · Nový Dvůr, Lhotka</div>
+      <button id="restart-btn" class="btn-restart">↺ Začít znovu</button>
+    </div>
+
+    <div id="level-label"></div>
+
+    <div class="card">
+      <img id="level-image" class="hidden" alt="šifra" />
+      <div id="prompt">Načítám…</div>
+
+      <div class="field">
+        <input id="answer" type="text" autocomplete="off" autocapitalize="off"
+               spellcheck="false" placeholder="Tvoje odpověď…" />
+      </div>
+      <button id="submit-btn" class="btn-primary">Ověřit odpověď</button>
+      <div id="error"></div>
+
+      <div id="success-box" class="hidden">
+        <div id="success-text"></div>
+        <button id="continue-btn" class="btn-go hidden">Pokračovat na další šifru →</button>
+        <div id="finale-choices" class="hidden">
+          <button id="hard-btn" class="btn-hard">Pokračovat na těžkou úroveň 🔥</button>
+          <button id="quit-btn" class="btn-quit">Ukončit hru</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">Tam, kde začíná my<span class="place">Jitka &amp; Radomír · 18. 7. 2026</span></div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
