@@ -48,7 +48,7 @@
       min-height: 100dvh;
     }
 
-    #game {
+    #intro, #game {
       width: 100%;
       max-width: 460px;
       animation: rise .6s cubic-bezier(.2,.8,.2,1);
@@ -57,6 +57,38 @@
     @keyframes rise {
       from { opacity: 0; transform: translateY(16px); }
       to { opacity: 1; transform: translateY(0); }
+    }
+
+    .intro-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 30px 26px;
+      box-shadow: 0 10px 40px rgba(120,100,60,.12);
+      position: relative;
+      text-align: center;
+    }
+    .intro-card::before {
+      content: "";
+      position: absolute;
+      inset: 7px;
+      border: 1px solid var(--line);
+      border-radius: 2px;
+      pointer-events: none;
+    }
+    .intro-lead {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 19px;
+      line-height: 1.55;
+      color: var(--ink-soft);
+      margin: 4px 0 22px;
+      position: relative;
+    }
+
+    .game-top {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 14px;
     }
 
     .crest {
@@ -112,7 +144,7 @@
     }
 
     .btn-restart {
-      margin-top: 16px;
+      margin-top: 0;
       padding: 7px 18px;
       font-family: "Cormorant Garamond", serif;
       font-size: 13px;
@@ -289,12 +321,26 @@
   </style>
 </head>
 <body>
-  <div id="game">
+  <!-- ÚVODNÍ OBRAZOVKA -->
+  <div id="intro">
     <div class="crest">
       <div class="eyebrow">Oslava lásky, která rostla<br>s každým dnem naší cesty</div>
       <div class="sprig">❧</div>
       <h1>Jitka &amp; Radomír</h1>
       <div class="meta">18. července 2026 · Nový Dvůr, Lhotka</div>
+    </div>
+
+    <div class="intro-card">
+      <p class="intro-lead">Připravili jsme pro vás malou šifrovací hru.<br>Vyřešte všechny šifry a projděte naší cestou.</p>
+      <button id="start-btn" class="btn-primary">Spustit šifrovací hru</button>
+    </div>
+
+    <div class="footer">Tam, kde začíná my<span class="place">Jitka &amp; Radomír · 18. 7. 2026</span></div>
+  </div>
+
+  <!-- HERNÍ OBRAZOVKA -->
+  <div id="game" class="hidden">
+    <div class="game-top">
       <button id="restart-btn" class="btn-restart">↺ Začít znovu</button>
     </div>
 
@@ -320,8 +366,6 @@
         </div>
       </div>
     </div>
-
-    <div class="footer">Tam, kde začíná my<span class="place">Jitka &amp; Radomír · 18. 7. 2026</span></div>
   </div>
 
   <script src="game.js"></script>

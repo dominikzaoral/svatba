@@ -249,8 +249,19 @@ async function init() {
   $("hard-btn").addEventListener("click", () => startBranch("tezka"));
   $("quit-btn").addEventListener("click", endGame);
   $("restart-btn").addEventListener("click", restartGame);
+  $("start-btn").addEventListener("click", startGame);
 
-  // Obnova uložené pozice (po refreshi / opětovném otevření)
+  // Pokud má hráč rozehráno, uprav text úvodního tlačítka
+  if (loadProgress()) {
+    $("start-btn").textContent = "Pokračovat ve hře";
+  }
+}
+
+// Přepnutí z úvodní obrazovky do hry
+function startGame() {
+  $("intro").classList.add("hidden");
+  $("game").classList.remove("hidden");
+
   const saved = loadProgress();
   if (saved) {
     state.branch = saved.branch;
