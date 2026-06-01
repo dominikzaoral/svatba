@@ -475,6 +475,16 @@ async function init() {
   $("restart-btn").addEventListener("click", restartGame);
   $("start-btn").addEventListener("click", startGame);
 
+  // pravidla
+  $("rules-btn").addEventListener("click", () => {
+    $("intro").classList.add("hidden");
+    $("rules").classList.remove("hidden");
+  });
+  $("rules-back").addEventListener("click", () => {
+    $("rules").classList.add("hidden");
+    $("intro").classList.remove("hidden");
+  });
+
   // tlačítka v dialogu volby restartu (těžká část)
   $("rm-hard").addEventListener("click", () => {
     $("restart-modal").classList.add("hidden");
