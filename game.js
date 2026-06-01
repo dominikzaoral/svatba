@@ -9,11 +9,12 @@ const state = {
   data: null,
   branch: "zakladni", // "zakladni" | "tezka"
   index: 0,           // index aktuální úrovně v rámci větve
-  current: null,      // obsah aktuální úrovně {prompt, image, isLast}
-  // Měření po částech. Každá část: startTime, elapsed (uzamčený čas v s), mistakes.
+  current: null,      // obsah aktuální úrovně {prompt, image, hints, isLast}
+  hintsShown: 0,      // kolik nápověd je odhaleno na AKTUÁLNÍ úrovni
+  // Měření po částech.
   parts: {
-    zakladni: { startTime: null, seconds: null, mistakes: 0 },
-    tezka:    { startTime: null, seconds: null, mistakes: 0 }
+    zakladni: { startTime: null, seconds: null, mistakes: 0, hints: 0 },
+    tezka:    { startTime: null, seconds: null, mistakes: 0, hints: 0 }
   }
 };
 
@@ -21,6 +22,7 @@ const state = {
 const SCORE_BASE = 10000;       // základní balík bodů na ČÁST
 const SCORE_PER_SECOND = 2;     // penalizace za sekundu
 const SCORE_PER_MISTAKE = 100;  // penalizace za špatnou odpověď
+const SCORE_PER_HINT = 150;     // penalizace za zobrazenou nápovědu (jen poprvé)
 
 // Spočítá skóre jedné části. Pokud má část uzamčený čas (seconds), použije ho;
 // jinak počítá živě z startTime.
@@ -29,8 +31,11 @@ function partResult(part) {
   if (seconds === null) {
     seconds = part.startTime ? Math.floor((Date.now() - part.startTime) / 1000) : 0;
   }
-  const raw = SCORE_BASE - seconds * SCORE_PER_SECOND - part.mistakes * SCORE_PER_MISTAKE;
-  return { score: Math.max(0, raw), seconds, mistakes: part.mistakes };
+  const hints = part.hints || 0;
+  const raw = SCORE_BASE - seconds * SCORE_PER_SECOND
+            - part.mistakes * SCORE_PER_MISTAKE
+            - hints * SCORE_PER_HINT;
+  return { score: Math.max(0, raw), seconds, mistakes: part.mistakes, hints };
 }
 
 // Uzamkne čas části (zastaví časomíru).
@@ -54,7 +59,8 @@ function singleScoreHtml(name) {
     '<div class="scorebox">' +
     '<div class="score-points">' + r.score.toLocaleString("cs-CZ") + ' bodů</div>' +
     '<div class="score-detail">Čas: ' + formatTime(r.seconds) +
-    ' &nbsp;·&nbsp; Chyby: ' + r.mistakes + '</div>' +
+    ' &nbsp;·&nbsp; Chyby: ' + r.mistakes +
+    ' &nbsp;·&nbsp; Nápovědy: ' + r.hints + '</div>' +
     '</div>'
   );
 }
@@ -78,9 +84,9 @@ function totalScoreHtml() {
   return (
     '<div class="scorebox">' +
     '<div class="score-line"><span>Základní úroveň</span><span>' + z.score.toLocaleString("cs-CZ") + ' b.</span></div>' +
-    '<div class="score-sub">Čas ' + formatTime(z.seconds) + ' · Chyby ' + z.mistakes + '</div>' +
+    '<div class="score-sub">Čas ' + formatTime(z.seconds) + ' · Chyby ' + z.mistakes + ' · Nápovědy ' + z.hints + '</div>' +
     '<div class="score-line"><span>Těžká úroveň</span><span>' + t.score.toLocaleString("cs-CZ") + ' b.</span></div>' +
-    '<div class="score-sub">Čas ' + formatTime(t.seconds) + ' · Chyby ' + t.mistakes + '</div>' +
+    '<div class="score-sub">Čas ' + formatTime(t.seconds) + ' · Chyby ' + t.mistakes + ' · Nápovědy ' + t.hints + '</div>' +
     '<div class="score-divider"></div>' +
     '<div class="score-line score-total"><span>Celkem</span><span>' + total.toLocaleString("cs-CZ") + ' b.</span></div>' +
     '<div class="score-rank">' + rank.title + '</div>' +
@@ -103,6 +109,7 @@ function saveProgress() {
         branch: state.branch,
         index: state.index,
         current: state.current, // obsah aktuální úrovně (už dešifrovaný)
+        hintsShown: state.hintsShown,
         parts: state.parts
       })
     );
@@ -197,6 +204,11 @@ function renderLevel(content) {
 
   $("prompt").innerHTML = content.prompt;
 
+  // --- NÁPOVĚDY ---
+  // hintsShown se nastaví před voláním renderLevel (0 pro novou úroveň,
+  // nebo obnovená hodnota po refreshi). Vykreslíme stav tlačítka i boxu.
+  renderHints();
+
   const imgEl = $("level-image");
   if (content.image) {
     imgEl.src = content.image;
@@ -213,11 +225,57 @@ function renderLevel(content) {
   $("answer").focus();
 }
 
+// Vykreslí tlačítko nápovědy a box s už odhalenými nápovědami podle stavu.
+function renderHints() {
+  const hints = (state.current && state.current.hints) || [];
+  const btn = $("hint-btn");
+  const box = $("hint-box");
+
+  // box: ukaž odhalené nápovědy
+  if (state.hintsShown > 0) {
+    box.innerHTML = hints
+      .slice(0, state.hintsShown)
+      .map((h) => '<div class="hint-item">' + h + "</div>")
+      .join("");
+    box.classList.remove("hidden");
+  } else {
+    box.innerHTML = "";
+    box.classList.add("hidden");
+  }
+
+  // tlačítko: zobraz jen pokud zbývá nějaká nenápověda
+  if (hints.length > 0 && state.hintsShown < hints.length) {
+    const remaining = hints.length - state.hintsShown;
+    btn.textContent = state.hintsShown === 0
+      ? "💡 Nápověda (−" + SCORE_PER_HINT + " b.)"
+      : "💡 Další nápověda (−" + SCORE_PER_HINT + " b.) · zbývá " + remaining;
+    btn.classList.remove("hidden");
+  } else {
+    btn.classList.add("hidden");
+  }
+}
+
+// Odhalí další nápovědu. Penalizuje jen poprvé (nová nápověda = nový odečet).
+function showHint() {
+  const hints = (state.current && state.current.hints) || [];
+  if (state.hintsShown >= hints.length) return;
+
+  const penalty = SCORE_PER_HINT;
+  if (!confirm("Zobrazit nápovědu? Odečte ti to " + penalty + " bodů.")) return;
+
+  state.hintsShown += 1;
+  state.parts[state.branch].hints += 1; // penalizace (jen za nové odhalení)
+  saveProgress();
+  renderHints();
+}
+
 function showSuccess(text, opts = {}) {
   $("success-text").innerHTML = text;
   $("success-box").classList.remove("hidden");
   $("answer").disabled = true;
   $("submit-btn").disabled = true;
+  // skryj tlačítko nápovědy (úroveň je vyřešená)
+  $("hint-btn").classList.add("hidden");
   // běžná mezi-úroveň: tlačítko Pokračovat na další šifru
   $("continue-btn").classList.remove("hidden");
 }
@@ -325,24 +383,27 @@ function goNext() {
   const next = state._pendingNext;
   state._pendingNext = null;
   state.index += 1;
-  renderLevel({ prompt: next.prompt, image: next.image, isLast: next.isLast });
+  state.hintsShown = 0; // nová úroveň → skryté nápovědy
+  renderLevel({ prompt: next.prompt, image: next.image, hints: next.hints || [], isLast: next.isLast });
   saveProgress();
 }
 
 function startBranch(branch) {
   state.branch = branch;
   state.index = 0;
+  state.hintsShown = 0;
   if (branch === "zakladni") {
     // nová hra: reset obou částí, spusť časomíru základní
     state.parts = {
-      zakladni: { startTime: Date.now(), seconds: null, mistakes: 0 },
-      tezka:    { startTime: null, seconds: null, mistakes: 0 }
+      zakladni: { startTime: Date.now(), seconds: null, mistakes: 0, hints: 0 },
+      tezka:    { startTime: null, seconds: null, mistakes: 0, hints: 0 }
     };
   } else if (branch === "tezka") {
     // časomíra těžké části se rozběhne TEĎ (po rozhodnutí pokračovat)
     state.parts.tezka.startTime = Date.now();
     state.parts.tezka.seconds = null;
     state.parts.tezka.mistakes = 0;
+    state.parts.tezka.hints = 0;
   }
   const start = state.data[branch].start;
   renderLevel(start);
@@ -375,9 +436,10 @@ function restartToIntro() {
   state._pendingNext = null;
   state.index = 0;
   state.branch = "zakladni";
+  state.hintsShown = 0;
   state.parts = {
-    zakladni: { startTime: null, seconds: null, mistakes: 0 },
-    tezka:    { startTime: null, seconds: null, mistakes: 0 }
+    zakladni: { startTime: null, seconds: null, mistakes: 0, hints: 0 },
+    tezka:    { startTime: null, seconds: null, mistakes: 0, hints: 0 }
   };
   $("game").classList.add("hidden");
   $("finale").classList.add("hidden");
@@ -409,6 +471,7 @@ async function init() {
     if (e.key === "Enter") handleSubmit();
   });
   $("continue-btn").addEventListener("click", goNext);
+  $("hint-btn").addEventListener("click", showHint);
   $("restart-btn").addEventListener("click", restartGame);
   $("start-btn").addEventListener("click", startGame);
 
@@ -440,6 +503,7 @@ function startGame() {
   if (saved) {
     state.branch = saved.branch;
     state.index = saved.index;
+    state.hintsShown = saved.hintsShown || 0;
     if (saved.parts) state.parts = saved.parts;
     renderLevel(saved.current);
     // pokud hráč skončil na finálové obrazovce, obnov ji jako samostatnou obrazovku

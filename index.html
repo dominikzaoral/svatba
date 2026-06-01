@@ -247,6 +247,38 @@
       color: var(--red);
     }
 
+    .btn-hint {
+      width: 100%;
+      margin-top: 6px;
+      padding: 11px;
+      font-family: "Cormorant Garamond", serif;
+      font-size: 14px;
+      letter-spacing: 1px;
+      color: var(--ink-dim);
+      background: transparent;
+      border: 1px dashed var(--line);
+      border-radius: 3px;
+    }
+    .btn-hint:hover { color: var(--accent-deep); border-color: var(--accent); }
+
+    #hint-box {
+      margin-top: 10px;
+      padding: 14px 16px;
+      background: rgba(184,146,78,.07);
+      border: 1px solid rgba(184,146,78,.25);
+      border-radius: 4px;
+      text-align: left;
+    }
+    .hint-item {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 16px;
+      line-height: 1.4;
+      color: var(--ink-soft);
+      padding: 5px 0;
+    }
+    .hint-item + .hint-item { border-top: 1px solid rgba(184,146,78,.18); }
+    .hint-item::before { content: "💡 "; }
+
     .hidden { display: none !important; }
 
     #success-box {
@@ -471,6 +503,9 @@
       </div>
       <button id="submit-btn" class="btn-primary">Ověřit odpověď</button>
       <div id="error"></div>
+
+      <button id="hint-btn" class="btn-hint hidden">💡 Nápověda (−150 b.)</button>
+      <div id="hint-box" class="hidden"></div>
 
       <div id="success-box" class="hidden">
         <div id="success-text"></div>
