@@ -68,6 +68,7 @@ function singleScoreHtml(name) {
 
 // Slovní rank podle celkového skóre (max 20000 = 2 části po 10000).
 function rankFor(total) {
+  if (total >= 19000) return { title: "Hacker", note: "Tohle už hraničí s magií!" };
   if (total >= 17000) return { title: "Velmistr šifer", note: "Naprostá špička!" };
   if (total >= 14000) return { title: "Mistr šifer", note: "Skvělý výkon!" };
   if (total >= 11000) return { title: "Zkušený luštitel", note: "Velmi dobré!" };
@@ -508,6 +509,13 @@ function showFinale(type, celebrate = true) {
     restart.textContent = "↺ Hrát znovu";
     restart.addEventListener("click", restartGame);
     actions.appendChild(restart);
+
+    // easter egg jen pro skóre 17000+
+    const z = partResult(state.parts.zakladni);
+    const t = partResult(state.parts.tezka);
+    if (z.score + t.score >= 17000) {
+      maybeShowEgg();
+    }
   }
 
   // oslava: konfety + fanfára (ne při obnově po refreshi)
@@ -517,8 +525,47 @@ function showFinale(type, celebrate = true) {
   }
 }
 
-// ---- SDÍLENÍ VÝSLEDKU ----
-const GAME_URL = "https://dominikzaoral.github.io/svatba/";
+// ---- EASTER EGG ----
+// Vejce ani zpráva nejsou v HTML. Vejce se vytvoří dynamicky jen při skóre 17000+.
+// Zpráva je v levels.json jen jako zašifrovaný blok — dešifruje se až po kliknutí.
+const EGG_KEY = "zlate-vejce-jitka-radomir";
+
+function maybeShowEgg() {
+  if (!state.data || !state.data.egg) return;
+  if (document.getElementById("egg")) return; // už tam je
+
+  const egg = document.createElement("div");
+  egg.id = "egg";
+  egg.textContent = "🥚";
+  egg.title = "";
+  egg.style.cssText =
+    "position:fixed;bottom:14px;right:14px;font-size:26px;cursor:pointer;" +
+    "z-index:60;opacity:.55;transition:opacity .2s,transform .2s;user-select:none;";
+  egg.addEventListener("mouseenter", () => { egg.style.opacity = "1"; egg.style.transform = "scale(1.15)"; });
+  egg.addEventListener("mouseleave", () => { egg.style.opacity = ".55"; egg.style.transform = "scale(1)"; });
+  egg.addEventListener("click", async () => {
+    const msg = await tryDecrypt(EGG_KEY, state.data.egg);
+    if (!msg) return;
+    showEggMessage(msg.message);
+    egg.remove();
+  });
+  document.body.appendChild(egg);
+}
+
+function showEggMessage(text) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML =
+    '<div class="modal-box">' +
+    '<div class="modal-title">Tajné vejce</div>' +
+    '<div class="modal-text" id="egg-msg"></div>' +
+    '<button class="btn-primary" id="egg-close">Zavřít</button>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  overlay.querySelector("#egg-msg").textContent = text;
+  overlay.querySelector("#egg-close").addEventListener("click", () => overlay.remove());
+  launchConfetti(1800);
+}
 
 function buildShareText() {
   const z = partResult(state.parts.zakladni);
