@@ -9,8 +9,9 @@ const state = {
   data: null,
   branch: "zakladni", // "zakladni" | "tezka"
   index: 0,           // index aktuální úrovně v rámci větve
-  current: null,      // obsah aktuální úrovně {prompt, image, hints, isLast}
+  current: null,      // obsah aktuální úrovně {prompt, image, hints, type, options, isLast}
   hintsShown: 0,      // kolik nápověd je odhaleno na AKTUÁLNÍ úrovni
+  selected: [],       // zvolené možnosti u abcd/combo
   // Měření po částech.
   parts: {
     zakladni: { startTime: null, seconds: null, mistakes: 0, hints: 0 },
@@ -151,6 +152,17 @@ function normalize(str) {
     .trim();
 }
 
+// Sjednotí odpověď na kanonický řetězec pro klíč (musí přesně odpovídat generátoru).
+// combo: položky seřadit (pořadí nehraje roli). poradi: pořadí zachovat.
+function answerKey(answer, type) {
+  if (Array.isArray(answer)) {
+    const items = answer.map((a) => normalize(String(a)));
+    if (type === "poradi") return items.join("|");
+    return items.sort().join("|");
+  }
+  return normalize(String(answer));
+}
+
 function fromB64(b64) {
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 }
@@ -159,7 +171,7 @@ async function deriveKey(answer, salt, iterations) {
   const enc = new TextEncoder();
   const baseKey = await crypto.subtle.importKey(
     "raw",
-    enc.encode(normalize(answer)),
+    enc.encode(answer),
     "PBKDF2",
     false,
     ["deriveKey"]
@@ -182,7 +194,7 @@ async function tryDecrypt(answer, block) {
     const salt = fromB64(block.salt);
     const iv = fromB64(block.iv);
     const data = fromB64(block.data);
-    const key = await deriveKey(answer, salt, state.data.meta.iterations);
+    const key = await deriveKey(answerKey(answer, state.current && state.current.type), salt, state.data.meta.iterations);
     const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
     return JSON.parse(new TextDecoder().decode(plain));
   } catch (e) {
@@ -281,6 +293,9 @@ function renderLevel(content) {
 
   $("prompt").innerHTML = content.prompt;
 
+  // --- TYP OTÁZKY ---
+  renderInput(content);
+
   // --- NÁPOVĚDY ---
   // hintsShown se nastaví před voláním renderLevel (0 pro novou úroveň,
   // nebo obnovená hodnota po refreshi). Vykreslíme stav tlačítka i boxu.
@@ -311,6 +326,88 @@ function renderLevel(content) {
   }
 
   $("answer").focus();
+}
+
+// Vykreslí vstup podle typu otázky.
+function renderInput(content) {
+  const type = content.type || "text";
+  const field = document.querySelector("#game .field");
+  const input = $("answer");
+  const opts = $("options");
+  state.selected = [];
+  opts.innerHTML = "";
+  opts.classList.remove("ordering");
+
+  if (type === "abcd" || type === "combo" || type === "ano_ne") {
+    field.classList.add("hidden");
+    opts.classList.remove("hidden");
+    const list = type === "ano_ne" ? ["Ano", "Ne"] : (content.options || []);
+    const single = (type === "abcd" || type === "ano_ne");
+    list.forEach((label) => {
+      const btn = document.createElement("button");
+      btn.className = "opt";
+      btn.textContent = label;
+      btn.addEventListener("click", () => {
+        if (single) {
+          state.selected = [label];
+          opts.querySelectorAll(".opt").forEach((b) => b.classList.remove("selected"));
+          btn.classList.add("selected");
+        } else {
+          const i = state.selected.indexOf(label);
+          if (i >= 0) { state.selected.splice(i, 1); btn.classList.remove("selected"); }
+          else { state.selected.push(label); btn.classList.add("selected"); }
+        }
+      });
+      opts.appendChild(btn);
+    });
+  } else if (type === "poradi") {
+    // řazení: klik přidá položku do pořadí (s číslem), další klik ji vyjme
+    field.classList.add("hidden");
+    opts.classList.remove("hidden");
+    opts.classList.add("ordering");
+    const list = content.options || [];
+    const render = () => {
+      opts.querySelectorAll(".opt").forEach((b) => {
+        const pos = state.selected.indexOf(b.dataset.label);
+        if (pos >= 0) { b.classList.add("selected"); b.dataset.pos = (pos + 1); }
+        else { b.classList.remove("selected"); b.dataset.pos = ""; }
+        b.textContent = (pos >= 0 ? (pos + 1) + ". " : "") + b.dataset.label;
+      });
+    };
+    list.forEach((label) => {
+      const btn = document.createElement("button");
+      btn.className = "opt";
+      btn.dataset.label = label;
+      btn.textContent = label;
+      btn.addEventListener("click", () => {
+        const i = state.selected.indexOf(label);
+        if (i >= 0) state.selected.splice(i, 1);
+        else state.selected.push(label);
+        render();
+      });
+      opts.appendChild(btn);
+    });
+  } else {
+    // text / cislo / datum
+    field.classList.remove("hidden");
+    opts.classList.add("hidden");
+    input.value = "";
+    if (type === "datum") {
+      input.type = "date";
+      input.inputMode = "text";
+    } else {
+      input.type = "text";
+      input.inputMode = (type === "cislo") ? "numeric" : "text";
+    }
+  }
+}
+
+// Sebere odpověď podle typu: string nebo pole.
+function collectAnswer() {
+  const type = (state.current && state.current.type) || "text";
+  if (type === "abcd" || type === "ano_ne") return state.selected[0] || "";
+  if (type === "combo" || type === "poradi") return state.selected.slice();
+  return $("answer").value;
 }
 
 // Vykreslí tlačítko nápovědy a box s už odhalenými nápovědami podle stavu.
@@ -466,8 +563,10 @@ function continueToHard() {
 }
 
 async function handleSubmit() {
-  const answer = $("answer").value;
-  if (!answer.trim()) return;
+  const answer = collectAnswer();
+  // validace: prázdná odpověď (text i výběr)
+  const empty = Array.isArray(answer) ? answer.length === 0 : !String(answer).trim();
+  if (empty) return;
 
   $("submit-btn").disabled = true;
   $("error").textContent = "Ověřuji…";
@@ -525,7 +624,14 @@ function goNext() {
   state._pendingNext = null;
   state.index += 1;
   state.hintsShown = 0; // nová úroveň → skryté nápovědy
-  renderLevel({ prompt: next.prompt, image: next.image, hints: next.hints || [], isLast: next.isLast });
+  renderLevel({
+    prompt: next.prompt,
+    image: next.image,
+    hints: next.hints || [],
+    type: next.type || "text",
+    options: next.options || null,
+    isLast: next.isLast
+  });
   saveProgress();
 }
 

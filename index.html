@@ -317,6 +317,36 @@
 
     .field { position: relative; }
 
+    .options {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 2px;
+    }
+    .opt {
+      width: 100%;
+      padding: 13px 16px;
+      font-family: "EB Garamond", serif;
+      font-size: 16px;
+      color: var(--ink);
+      background: var(--field-bg);
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .15s ease;
+    }
+    .opt:hover { border-color: var(--accent); }
+    .opt.selected {
+      background: linear-gradient(180deg, var(--accent-soft), var(--accent));
+      color: var(--on-accent);
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+    .opt.selected::before { content: "✓ "; }
+    .options.ordering .opt.selected::before { content: ""; }
+    .options.ordering .opt { font-variant-numeric: tabular-nums; }
+
     #answer {
       width: 100%;
       padding: 15px 16px;
@@ -626,6 +656,7 @@
         <input id="answer" type="text" autocomplete="off" autocapitalize="off"
                spellcheck="false" placeholder="Tvoje odpověď…" />
       </div>
+      <div id="options" class="options hidden"></div>
       <button id="submit-btn" class="btn-primary">Ověřit odpověď</button>
       <div id="error"></div>
 
