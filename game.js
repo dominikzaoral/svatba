@@ -100,21 +100,32 @@ function totalScoreHtml() {
 // ---- UKLÁDÁNÍ POSTUPU (localStorage) ----
 // Ukládáme JEN už dešifrovaný obsah dosažené úrovně, NIKDY odpovědi.
 // Kdo hru nehrál, v úložišti nic použitelného nenajde.
+// Postup je podepsaný checksumem — ruční úpravy se poznají (a okomentují 🕵️).
 
-const SAVE_KEY = "svatba_sifrovacka_v1";
+const SAVE_KEY = "svatba_sifrovacka_v2";
+
+// Jednoduchý podpis dat (djb2 + sůl). Není to kryptografická ochrana — kdo si
+// přečte tenhle kód, obejde ji. Ale o tom to celé je, ne? 😉
+function saveChecksum(str) {
+  let h = 5381;
+  const salted = str + "|jr-2026-lhotka";
+  for (let i = 0; i < salted.length; i++) {
+    h = ((h << 5) + h + salted.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(36);
+}
 
 function saveProgress() {
   try {
-    localStorage.setItem(
-      SAVE_KEY,
-      JSON.stringify({
-        branch: state.branch,
-        index: state.index,
-        current: state.current, // obsah aktuální úrovně (už dešifrovaný)
-        hintsShown: state.hintsShown,
-        parts: state.parts
-      })
-    );
+    const payload = {
+      branch: state.branch,
+      index: state.index,
+      current: state.current, // obsah aktuální úrovně (už dešifrovaný)
+      hintsShown: state.hintsShown,
+      parts: state.parts
+    };
+    const body = JSON.stringify(payload);
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ d: payload, c: saveChecksum(body) }));
   } catch (e) {
     // localStorage může být vypnutý (privátní režim) — hra funguje dál, jen bez uložení
   }
@@ -124,10 +135,21 @@ function loadProgress() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
-    const s = JSON.parse(raw);
+    const wrap = JSON.parse(raw);
+    // nový formát: { d: data, c: checksum }
+    if (!wrap || !wrap.d || !wrap.c) {
+      clearProgress();
+      return null;
+    }
+    if (saveChecksum(JSON.stringify(wrap.d)) !== wrap.c) {
+      // ručně upravený postup — uznale pokáráme a začínáme od nuly
+      state._tampered = true;
+      clearProgress();
+      return null;
+    }
+    const s = wrap.d;
     if (!s || !s.current || typeof s.index !== "number") return null;
     if (s.branch !== "zakladni" && s.branch !== "tezka") return null;
-    // starý formát bez parts (z předchozí verze) — nepoužitelný, zahodíme
     if (!s.parts || !s.parts.zakladni || !s.parts.tezka) {
       clearProgress();
       return null;
@@ -162,6 +184,11 @@ function answerKey(answer, type) {
     return items.sort().join("|");
   }
   return normalize(String(answer));
+}
+
+async function sha256hex(str) {
+  const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function fromB64(b64) {
@@ -527,8 +554,8 @@ function showFinale(type, celebrate = true) {
 
 // ---- EASTER EGG ----
 // Vejce ani zpráva nejsou v HTML. Vejce se vytvoří dynamicky jen při skóre 17000+.
-// Zpráva je v levels.json jen jako zašifrovaný blok — dešifruje se až po kliknutí.
-const EGG_KEY = "zlate-vejce-jitka-radomir";
+// Klíč k dešifrování se odvozuje z otisků posledních odpovědí obou větví —
+// v kódu žádný klíč není, vejce odemkne jen ten, kdo hru skutečně dohrál.
 
 function maybeShowEgg() {
   if (!state.data || !state.data.egg) return;
@@ -544,27 +571,73 @@ function maybeShowEgg() {
   egg.addEventListener("mouseenter", () => { egg.style.opacity = "1"; egg.style.transform = "scale(1.15)"; });
   egg.addEventListener("mouseleave", () => { egg.style.opacity = ".55"; egg.style.transform = "scale(1)"; });
   egg.addEventListener("click", async () => {
-    const msg = await tryDecrypt(EGG_KEY, state.data.egg);
+    const fkZ = state.parts.zakladni.fk;
+    const fkT = state.parts.tezka.fk;
+    if (!fkZ || !fkT) return;
+    const eggKey = await sha256hex(fkZ + "|" + fkT);
+    const msg = await tryDecrypt(eggKey, state.data.egg);
     if (!msg) return;
-    showEggMessage(msg.message);
+    showSecretMessage("Tajné vejce", msg.message);
     egg.remove();
   });
   document.body.appendChild(egg);
 }
 
-function showEggMessage(text) {
+function showSecretMessage(title, text) {
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.innerHTML =
     '<div class="modal-box">' +
-    '<div class="modal-title">Tajné vejce</div>' +
-    '<div class="modal-text" id="egg-msg"></div>' +
-    '<button class="btn-primary" id="egg-close">Zavřít</button>' +
+    '<div class="modal-title"></div>' +
+    '<div class="modal-text"></div>' +
+    '<button class="btn-primary">Zavřít</button>' +
     '</div>';
   document.body.appendChild(overlay);
-  overlay.querySelector("#egg-msg").textContent = text;
-  overlay.querySelector("#egg-close").addEventListener("click", () => overlay.remove());
+  overlay.querySelector(".modal-title").textContent = title;
+  overlay.querySelector(".modal-text").textContent = text;
+  overlay.querySelector("button").addEventListener("click", () => overlay.remove());
   launchConfetti(1800);
+}
+
+// ---- HACKERSKÁ VÝZVA (konzole) ----
+// Globální funkce pro zvědavce: svatba('odpověď'). Odměna je zašifrovaná
+// v levels.json — odpověď ani zpráva nejsou čitelné v žádném souboru na webu.
+async function svatba(odpoved) {
+  if (!state.data || !state.data.hacker) return "Hra ještě není načtená.";
+  const msg = await tryDecrypt(String(odpoved || ""), state.data.hacker);
+  if (!msg) {
+    console.log("%c❌ Blízko, ale ne. Zkus to znovu.", "color:#b56a52;font-size:13px;");
+    return "Špatně.";
+  }
+  console.log("%c✅ White Hat potvrzen.", "color:#6f8a5b;font-size:14px;font-weight:bold;");
+  showSecretMessage("🎩 White Hat", msg.message);
+  return "Gratuluju!";
+}
+
+// ---- KONZOLOVÝ POZDRAV ----
+function consoleGreeting() {
+  try {
+    const gold = "color:#b8924e;";
+    console.log(
+      "%c✦ ✧ ✦\n%cJitka ♥ Radomír%c\n18. 7. 2026 · Nový Dvůr, Lhotka",
+      gold + "font-size:14px;",
+      gold + "font-size:26px;font-family:Georgia,serif;",
+      "color:#8a7d6c;font-size:12px;"
+    );
+    console.log("%cVidíme tě 👀 Když už jsi tady…", "font-size:13px;");
+    if (state.data && state.data.hackerHint) {
+      console.log(
+        "%c🔐 Výzva pro zvědavé: dekóduj  %c" + state.data.hackerHint + "%c\n   Nápověda: Caesar by to posunul o 13 a pak zabalil do base64.\n   Až to rozlouskneš, zavolej: svatba('výsledek')",
+        "color:#6f8a5b;font-size:13px;",
+        "color:#6f8a5b;font-size:13px;font-weight:bold;font-family:monospace;",
+        "color:#6f8a5b;font-size:12px;"
+      );
+    }
+    console.log(
+      "%cP.S. Šifry: AES-256-GCM, klíče PBKDF2-SHA256 (250 000 iterací). Odpovědi v kódu nenajdeš. Brute-force na vlastní nebezpečí. 😉",
+      "color:#999;font-size:11px;"
+    );
+  } catch (e) { /* konzole není kritická */ }
 }
 
 function buildShareText() {
@@ -634,6 +707,11 @@ async function handleSubmit() {
       $("submit-btn").disabled = false;
       return;
     }
+    // otisk správné poslední odpovědi (hash) — slouží k odvození klíče vejce,
+    // odpověď samotná se NIKDE neukládá
+    state.parts[state.branch].fk = await sha256hex(
+      answerKey(answer, state.current && state.current.type)
+    );
     if (state.branch === "zakladni") {
       // zastav časomíru základní části (pauza do rozhodnutí pokračovat)
       lockPart("zakladni");
@@ -776,6 +854,9 @@ function toggleTheme() {
 }
 
 async function init() {
+  // úklid uloženého postupu ze starší verze hry
+  try { localStorage.removeItem("svatba_sifrovacka_v1"); } catch (e) {}
+
   try {
     const res = await fetch("levels.json", { cache: "no-store" });
     state.data = await res.json();
@@ -783,6 +864,9 @@ async function init() {
     $("prompt").textContent = "Nepodařilo se načíst hru (levels.json).";
     return;
   }
+
+  // pozdrav pro zvědavce v konzoli (+ hackerská výzva)
+  consoleGreeting();
 
   $("submit-btn").addEventListener("click", handleSubmit);
   $("answer").addEventListener("keydown", (e) => {
@@ -823,6 +907,14 @@ async function init() {
   // Pokud má hráč rozehráno, uprav text úvodního tlačítka
   if (loadProgress()) {
     $("start-btn").textContent = "Pokračovat ve hře";
+  }
+
+  // ruční úprava uloženého postupu? uznale pokáráme
+  if (state._tampered) {
+    showSecretMessage(
+      "🕵️ Pěkný pokus",
+      "Ruční úpravy uloženého postupu detekovány. Respekt za snahu — ale tohle vejce si musíš zasloužit. Začínáš od první šifry. (Mimochodem, koukni do konzole.)"
+    );
   }
 }
 
